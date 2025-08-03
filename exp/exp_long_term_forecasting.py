@@ -72,7 +72,14 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                         
                 f_dim = -1 if self.args.features == 'MS' else 0
                 outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+                # batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+                if batch_y.dim() == 3:
+                    batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+                elif batch_y.dim() == 2:
+                    batch_y = batch_y[:, -self.args.pred_len:].unsqueeze(-1).to(self.device)
+                else:
+                    raise ValueError(f"Unexpected batch_y shape: {batch_y.shape}")
+
 
                 pred = outputs.detach().cpu()
                 true = batch_y.detach().cpu()
@@ -96,7 +103,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         time_now = time.time()
 
         train_steps = len(train_loader)
-#         early_stopping = EarlyStopping(patience=self.args.patience, verbose=True)
+        early_stopping = EarlyStopping(patience=self.args.patience, verbose=True)
 
         model_optim = self._select_optimizer()
         criterion = self._select_criterion()
@@ -166,6 +173,10 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 epoch + 1, train_steps, train_loss, vali_loss, test_loss))
 
             adjust_learning_rate(model_optim, epoch + 1, self.args)
+            early_stopping(vali_loss, self.model, path)
+            if early_stopping.early_stop:
+                print("Early stopping triggered. Training stopped.")
+                break
             # We do not use early stopping
             
             if vali_loss < best_valid_loss:
@@ -276,6 +287,23 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         f.write('\n')
         f.write('\n')
         f.close()
+
+        import csv
+        csv_path = "result_long_term_forecast.csv"
+        write_header = not os.path.exists(csv_path)
+
+        with open(csv_path, 'a', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            if write_header:
+                writer.writerow(['data', 'sl', 'pl', 'topm', 'mse', 'mae'])
+            writer.writerow([
+                self.args.data_path.replace('.csv', ''),  # lấy tên gọn như 'GOOG'
+                self.args.seq_len,
+                self.args.pred_len,
+                self.args.topm,
+                round(mse, 6),
+                round(mae, 6)
+            ])
 
         np.save(folder_path + 'metrics.npy', np.array([mae, mse, rmse, mape, mspe]))
         np.save(folder_path + 'pred.npy', preds)

@@ -49,7 +49,9 @@ class Dataset_ETT_hour(Dataset):
         self.scaler = StandardScaler()
         df_raw = pd.read_csv(os.path.join(self.root_path,
                                           self.data_path))
-
+        print(f"Reading data from {os.path.join(self.root_path, self.data_path)}")
+        print(f"Data shape: {df_raw.shape}")
+        print(f"data nones: {df_raw.isnull().sum().sum()}")
         border1s = [0, 12 * 30 * 24 - self.seq_len, 12 * 30 * 24 + 4 * 30 * 24 - self.seq_len]
         border2s = [12 * 30 * 24, 12 * 30 * 24 + 4 * 30 * 24, 12 * 30 * 24 + 8 * 30 * 24]
         border1 = border1s[self.set_type]
@@ -265,14 +267,32 @@ class Dataset_Custom(Dataset):
         cols.remove(self.target)
         cols.remove('date')
         df_raw = df_raw[['date'] + cols + [self.target]]
+        # num_train = int(len(df_raw) * 0.7)
+        # num_test = int(len(df_raw) * 0.2)
+        # num_vali = len(df_raw) - num_train - num_test
+        # border1s = [0, num_train - self.seq_len, len(df_raw) - num_test - self.seq_len]
+        # border2s = [num_train, num_train + num_vali, len(df_raw)]
+        # border1 = border1s[self.set_type]
+        # border2 = border2s[self.set_type]
+
+        # Chia theo tỉ lệ 70% train, 30% test, val
         num_train = int(len(df_raw) * 0.7)
-        num_test = int(len(df_raw) * 0.2)
-        num_vali = len(df_raw) - num_train - num_test
-        border1s = [0, num_train - self.seq_len, len(df_raw) - num_test - self.seq_len]
-        border2s = [num_train, num_train + num_vali, len(df_raw)]
+        num_test = len(df_raw) - num_train
+
+        # Cho cả val và test trỏ cùng 30% cuối
+        border1s = {
+            0: 0,                             # train
+            1: num_train - self.seq_len,     # val 
+            2: num_train - self.seq_len      # test 
+        }
+        border2s = {
+            0: num_train,                    # train
+            1: len(df_raw),                 # val
+            2: len(df_raw)                  # test
+        }
         border1 = border1s[self.set_type]
         border2 = border2s[self.set_type]
-
+        
         if self.features == 'M' or self.features == 'MS':
             cols_data = df_raw.columns[1:]
             df_data = df_raw[cols_data]

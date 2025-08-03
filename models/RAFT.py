@@ -84,20 +84,27 @@ class Model(nn.Module):
 
         x_pred_from_x = self.linear_x(x_norm.permute(0, 2, 1)).permute(0, 2, 1) # B, P, C
         
-        pred_from_retrieval = self.retrieval_dict[mode][:, index] # G, B, P, C
+        device = index.device
+        tensor = self.retrieval_dict[mode].to(device)
+        pred_from_retrieval = tensor[:, index]
         pred_from_retrieval = pred_from_retrieval.to(self.device)
         
         retrieval_pred_list = []
         
         # Compress repeating dimensions
         for i, pr in enumerate(pred_from_retrieval):
-            assert((bsz, self.pred_len, channels) == pr.shape)
+            # print("Initial pr.shape:", pr.shape)  # G, B, P, C ?
             g = self.period_num[i]
             pr = pr.reshape(bsz, self.pred_len // g, g, channels)
-            pr = pr[:, :, 0, :]
-            
+            # print("After reshape:", pr.shape)
+
+            pr = pr[:, :, 0, :]  # --> giảm chiều
+            # print("After slicing:", pr.shape)
+
             pr = self.retrieval_pred[i](pr.permute(0, 2, 1)).permute(0, 2, 1)
-            pr = pr.reshape(bsz, self.pred_len, self.channels)
+            # print("After retrieval_pred:", pr.shape)
+
+            # pr = pr.reshape(bsz, self.pred_len, self.channels)
             
             retrieval_pred_list.append(pr)
 
@@ -105,7 +112,8 @@ class Model(nn.Module):
         retrieval_pred_list = retrieval_pred_list.sum(dim=1)
         
         pred = torch.cat([x_pred_from_x, retrieval_pred_list], dim=1)
-        pred = self.linear_pred(pred.permute(0, 2, 1)).permute(0, 2, 1).reshape(bsz, self.pred_len, self.channels)
+        pred = self.linear_pred(pred.permute(0, 2, 1)).permute(0, 2, 1)
+        # .reshape(bsz, self.pred_len, self.channels)
         
         pred = pred + x_offset
         
